@@ -1,6 +1,7 @@
 import logging
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
+import time
 
 import requests
 from bs4 import BeautifulSoup
@@ -88,6 +89,7 @@ class Session(metaclass = SingletonMeta):
             url: str,
             params: dict[str, str] | None = None,
             headers: dict[str, str] | None = None,
+            retry_count = 0
     ) -> BeautifulSoup | None:
         if params is None:
             params = {}
@@ -115,6 +117,23 @@ class Session(metaclass = SingletonMeta):
             return None
 
         if response.status_code != 200:
+            if response.status_code == 429:
+                if retry_count > self._options.max_retries:
+                    self._logger.error(
+                        f"Failed on 429 with exceeded retries for {response.url}"
+                    )
+                    
+                    return None
+                
+                retry_count += 1
+                self._logger.info(
+                    f"{f'[RETRY]':<20} {retry_count}/{self._options.max_retries} {response.url}"
+                )
+                
+                time.sleep(1)
+                
+                return self.get_soup(url, params, headers, retry_count)
+                
             return None
 
         return BeautifulSoup(response.text, "html.parser")

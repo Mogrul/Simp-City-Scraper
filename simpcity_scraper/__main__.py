@@ -1,14 +1,16 @@
-from simpcity_scraper.shared.logger import load_logger
-from simpcity_scraper.shared.args import Args
-from simpcity_scraper.simpcity.simpcity import SimpCity
+from simpcity_scraper.logger import load_logger
+from simpcity_scraper.options import Options
+from simpcity_scraper.scraper import Scraper
+
+
 
 def main():
-    args = Args()
-    logger = load_logger(args.debug)
-    
-    simpcity = SimpCity()
-    simpcity.run()
-
+    options = Options()
+    logger = load_logger(
+        debug = options.debug,
+    )
+    scraper = Scraper()
+    scraper.run()
 
 if __name__ == "__main__":
     main()

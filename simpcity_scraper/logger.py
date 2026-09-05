@@ -75,6 +75,7 @@ class FileFormatter(logging.Formatter):
 
         return f"{time} {level:<8} {name.upper():<20} {thread.upper():<15}\n      {msg}"
 
+
 def load_logger(debug=False) -> logging.Logger:
     """Loads the default log configuration into the code."""
     logger = logging.getLogger()

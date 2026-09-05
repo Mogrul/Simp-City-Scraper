@@ -1,87 +1,87 @@
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor, Future
-from threading import Condition
-from pathlib import Path
 
-from simpcity_scraper.simpcity.models import ExternalURL, User
-from simpcity_scraper.shared.args import Args
-from simpcity_scraper.session.session import Session
+from simpcity_scraper.models import User, Media
+from simpcity_scraper.session import Session
+from simpcity_scraper.options import Options
 
 
 class Domain:
     def __init__(
             self,
-            external_urls: list[ExternalURL],
             user: User,
-            logger: logging.Logger | None = None
+            medias: list[Media],
+            logger: logging.Logger | None = None,
     ):
-        self._logger = (
-            logger if logger 
-            else logging.getLogger(__name__)
-        )
-        self._args = Args()
+        self._logger = logger if logger else logging.getLogger("Domain")
+        self._user = user
+        self._medias = medias
         self._session = Session()
-        
-        self.user = user
-        self.external_urls = external_urls
-        self.user_path = (
-            self._args.download_location
-            / self.user.name
-        )
-        
+        self._options = Options()
         self._executor = ThreadPoolExecutor(
-            max_workers = self._args.concurrent_downloads
+            max_workers = self._options.concurrent_downloads
         )
-        self._condition = Condition()
-        self._pending = 0
-        self._results = []
-    
-    
-    def submit(self, fn, *args, **kwargs):
-        with self._condition:
-            self._pending += 1
-        
-        future = self._executor.submit(fn, *args, **kwargs)
-        future.add_done_callback(self._task_done)
-    
-    
-    def _task_done(self, future: Future):
-        try:
-            result = future.result()
-        
-            with self._condition:
-                self._results.append(result)
-        
-        finally:
-            with self._condition:
-                self._pending -= 1
-                
-                if self._pending == 0:
-                    self._condition.notify_all()
-    
-    
-    def start(self):
-        for external_url in self.external_urls:
-            self.submit(self.on_task, external_url)
-        
-        with self._condition:
-            while self._pending > 0:
-                self._condition.wait()
-        
-        return self._results
-    
-    
-    def on_task(self, external_url: ExternalURL) -> None:
-        pass
-    
-    
-    def handle_album(self, external_url: ExternalURL) -> None:
-        pass
-        
-        
-    def handle_item(
-            self,
-            external_url: ExternalURL,
-            post_path: Path,
-    ) -> None:
-        pass
+
+        self._futures: list[Future] = []
+        self._lock = threading.Lock()
+
+        self.user_path = (
+            self._options.download_location
+            / self._user.name
+        )
+
+
+    def submit_task(self, media: Media) -> Future:
+        future = self._executor.submit(
+            self.on_task,
+            media,
+        )
+
+        with self._lock:
+            self._futures.append(future)
+
+        return future
+
+
+    def start(self) -> None:
+        for media in self._medias:
+            self.submit_task(media)
+
+        index = 0
+
+        while True:
+            with self._lock:
+                futures = self._futures[index:]
+
+            if not futures:
+                with self._lock:
+                    if index == len(self._futures):
+                        break
+
+                continue
+
+            for future in futures:
+                index += 1
+
+                try:
+                    result = future.result()
+
+                except Exception as e:
+                    self._logger.exception(e)
+                    continue
+
+        self._executor.shutdown()
+        return None
+
+
+    def on_task(self, media: Media) -> None:
+        return None
+
+
+    def on_album(self, media: Media) -> None:
+        return None
+
+
+    def on_item(self, media: Media) -> None:
+        return None
